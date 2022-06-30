@@ -1,0 +1,39 @@
+\documentclass[]{scrartcl}
+
+%opening
+\title{Project Name}
+\author{Name}
+
+\begin{document}
+
+\maketitle
+
+\section{Purpose}
+Write a description of what this simulation is for. This should be a few sentences to a few paragraphs. This is a brief background 
+\section{Physical Objects and Observables}
+List out the physical objects that are present in your simulation with a short description and what they do. This should list out all of the physical objects mentioned in the Purpose statement or needed to achieve it. Here you should also list out what you want to measure and any analytical equations for those measurements (either in math or words). Concepts here should be purely physical, don’t think about how you want to code it up yet. 
+
+Can also list out derived measurements (MSD from position ect)
+
+\section{Processes}
+List out all the physical processes that you want to capture, the dynamics, the events, the stochastic processes. Everything that the physical objects can do should be listed here. Additionally laboratory, experiment and system level processes should be listed here. For example the boundary conditions, ways of probing or perturbing the system. As above concepts here should be purely physical, don’t think about how you want to code it up yet. 
+
+\section{Procedure}
+For every process you should have an idea of the way you actually want to accomplish it. This is the first place you want to think about how this will be realized in code, but only to choose algorithms. If you have some dynamics you should decide on the exact discretization method you want to use. You can list out the different algorithms you want to use for the different processes. It is also a good idea to list out the equations for the observables. You also want to decide how your simulation will receive inputs and outputs as well as a naming scheme for files
+
+\section{Plan out your classes}
+Use a graphical tool to plan out your classes, typically you will want an experiment class to read in and manage parameters for other classes. A solver class to manage the dynamics and events, a class for each physical object and observable. Having a class for observables makes it easy to add measurements in future revisions. 
+
+\section{Project Management and Coding}
+Algorithms are chosen, equations are written down, classes are diagrammed out. It's time to finally write some code. For projects that take more than a day or two it's a good idea to figure out a good order to get things done. This is entirely your preference but having a plan keeps you from missing things. Typical strategies are:
+Ground up where you start with the most basic elements, usually the physical objects and write their behavior, then write the logic for how they interact, and so on up the chain.
+Top down where you start with the most top level class and write down functions that you that you will fill in later. E.G. you might have a solver class that has a .run() function that looks like
+System.diffuse()
+System.bind()
+System.measure()
+And fill in those functions later
+A depth first approach where you start from the top write a function call and keep coding until you get to the bottom
+
+\section{Please test your code}
+
+\end{document}
