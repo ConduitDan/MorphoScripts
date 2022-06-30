@@ -1,0 +1,69 @@
+import functionals
+import "MorphoCommon/myMesh.morpho"
+import "MorphoCommon/PrettyPlots.morpho"
+import optimize
+
+
+
+
+var r = 1.0 //radius
+var ratio = 0.6 //height to diameter ratio
+var L = 2*r*ratio // Separation
+var m = AreaMesh(fn (u, v) [r*cos(u), v, r*sin(u)],  -Pi...Pi:Pi/20,-L/2..L/2:L/10, closed=[true,false])
+m.addgrade(0)
+m.addgrade(1)
+
+var problem = OptimizationProblem(m)
+var area = Area()
+problem.addenergy(area)
+
+var opt = ShapeOptimizer(problem, m)
+var bnd2 = Selection(m, boundary=true)
+bnd2.addgrade(1)
+opt.fix(bnd2)
+
+opt.gradientDecent(100)
+
+
+
+
+
+
+
+
+// var m = mobius()
+// var refiner = MeshRefiner(m)
+// refiner.refinemesh()
+// //refinemesh(m)
+// var bnd = Selection(m, boundary=true)
+// bnd.addgrade(1)
+// var pp = PrettyPrinter(mesh = m,selection = bnd,grade = [1,2])
+
+// pp.animate("Mobi.mp4",dist = 10,duration = 5,axis = Matrix([0, 1, 0]), camera = Matrix([1,-0.5,0]))
+// minimalSuraface(m)
+// pp.animate("MiniMobi.mp4",dist = 10,duration = 5,axis = Matrix([0, 1, 0]), camera = Matrix([1,-0.5,0]))
+
+
+var m = cylinder()
+var bnd2 = Selection(m, boundary=true)
+bnd2.addgrade(1)
+
+var pp = PrettyPrinter(mesh = m,selection = bnd2,grade = [1,2])
+    var problem = OptimizationProblem(m)
+    var area = Area()
+    problem.addenergy(area)
+    var opt = ShapeOptimizer(problem, m)
+    opt.fix(bnd2)
+    opt.stepsize=0.03
+    pp.animateMinimization(opt,"CatinoindMiniAni.mp4",1000,dist = 7, camera = Matrix([1,-0.5,0]))
+
+// pp.animate("Cyl.mp4",dist = 7,duration = 5,axis = Matrix([0, 1, 0]), camera = Matrix([1,-0.5,0]))
+// minimalSuraface(m2)
+// pp.animate("MiniCyl.mp4",dist = 7,duration = 5,axis = Matrix([0, 1, 0]), camera = Matrix([1,-0.5,0]))
+
+//var m3 = threePStart()
+
+//  var pp = PrettyPrinter(mesh = m3)
+//  pp.animate("ThreeP.mp4")
+//  minimalSuraface(m3)
+//  pp.animate("Mini3P.mp4")

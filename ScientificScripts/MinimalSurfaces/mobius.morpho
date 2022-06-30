@@ -1,0 +1,79 @@
+/*
+This script computes the shape of a soap film attached to two circular rings separated vertically.
+The surface tension minimizes the area of this film, resulting in the minimal surface called a "catenoid".
+*/
+
+import meshtools
+import plot
+import optimize
+import povray
+
+var r = 1.0 // radius
+var ratio = 0.5 // Separation to diameter ratio
+
+var upper_bound = Pi/sqrt(3)
+
+print ratio/upper_bound
+if (ratio>upper_bound){
+    print "Separation too large!"  
+} 
+var L = 2*r*ratio // Separation
+
+
+// Define a parametrization for the Möbius strip
+
+fn mobius(u,v, ntwist=1){
+    var th = Matrix([cos(u), 0, sin(u)])
+    // print sin(0.5*twist*u)
+    var twist = (cos(0.5*ntwist*u)*th + sin(0.5*ntwist*u)*Matrix([0,1,0]))
+    return r*th + v*twist
+}
+
+var m = AreaMesh(fn(u,v) mobius(u,v,ntwist=-1), -Pi..Pi:Pi/20,-L/2..L/2:L/10, closed=[false,false])
+
+// m.addgrade(0)
+m.addgrade(1)
+
+var merger = MeshMerge([m]) // This is required to fix the issue of joining the opposite ends of the strip together
+var m = merger.merge()
+
+var bnd = Selection(m, boundary=true)
+bnd.addgrade(1)
+
+var g = plotselection(m, bnd, grade=1)
+g.title = "Before"
+Show(g)
+
+var problem = OptimizationProblem(m)
+var area = Area()
+problem.addenergy(area)
+
+var opt = ShapeOptimizer(problem, m)
+opt.fix(bnd)
+
+
+var reg = OptimizationProblem(m)
+var el = EquiElement()
+reg.addenergy(el)
+
+var ropt = ShapeOptimizer(reg, m)
+ropt.fix(bnd)
+ropt.stepsize = 0.1
+
+opt.stepsize = 0.1
+opt.quiet = true
+for (i in 1..20){
+    print "i = ${i}"
+    opt.relax(100)
+    // ropt.relax(10)
+    equiangulate(m)
+}
+var g = plotselection(m, bnd, grade=1)
+g.title = "After"
+Show(g)
+var pov = POVRaytracer(g)
+pov.viewangle = 35
+pov.viewpoint=Matrix([5,-5,0])
+pov.light=[Matrix([3,3,5]), Matrix([-3,-3,-5]), Matrix([0,0,8]), Matrix([0,0,-8])]
+
+pov.render("minimal_mobius.pov")

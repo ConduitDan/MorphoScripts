@@ -1,0 +1,204 @@
+/* This script generates a unit cell for a knit [1].
+We start with a rough approximation of the unit cell generated using a part of the dumbbell curve and two quarters of an ellipse.
+We then optimize the shape of the unit cell by minimizing the length and the line curvature squared energy.
+In addition, we impose impenetrability on the individual threads so as to maintain the topology of the knit. 
+We do this by adding a Hertzian sphere potential to each vertex point, with radius roughly equal to the vertex spacing.
+*/
+import meshtools
+import plot
+import symmetry
+import optimize
+import povray
+// import functionals
+import functionals // Using the for-now new functionals.morpho as it fixes the issue of applying constraints to periodic points correctly
+
+var dx = 0.05*Pi
+var h = 1.2 // Decides the vertical spacing between the knits. This number is eye-balled right now
+var k = 0.5 // ratio of the minor axis to the major axis of the ellipse 
+
+var m1 = LineMesh(fn (t) [k*sin(t)-(k+0.5), 0.5*h+cos(t), 0], 0.5*Pi..Pi:dx, closed=false) // Left thread of the ellipse
+var m2 = LineMesh(fn (t) [k*sin(t)+(k+0.5), 0.5*h+cos(t), 0], -0.5*Pi..-Pi:(-dx), closed=false) // Right thread of the ellipse
+var m3 = LineMesh(fn (t) [sin(t)*(0.5 + cos(t)^2), cos(t)-0.5*h, 0.5*cos(3*t)], -0.5*Pi..0.5*Pi:dx, closed=false) // Part of the dumbbell curve
+
+var disp_x = Matrix([(1+2*k), 0, 0]) // This is the discrete period of the knit in the x direction
+var disp_y = Matrix([0, h, 0]) // This is the discrete period of the knit in the y direction
+
+// We now merge the three threads into one single mesh
+print "Starting the merge..."
+var merge = MeshMerge([m1])
+merge.addmesh([m2])
+merge.addmesh([m3])
+
+var merge = MeshMerge([m1,m2,m3])
+var m = merge.merge()
+m.addgrade(1)
+
+m.save("unit_cell_crude.mesh")
+print "Merge complete!"
+var g1 = plotmesh(m)
+g1.title = "Before"
+Show(g1)
+
+/* List the x-y coordinates of the end-points.
+
+The end points are labeled like so:
+      c   e
+    _ |_ _| _ 
+   |  |   |  |
+d---\-'   '-/---f
+     \     /
+     a     b
+
+Thus, for the periodicity, 
+a <-> c
+b <-> e
+d <-> f
+*/
+var xa = -0.5
+var ya = -0.5*h
+
+var xb = 0.5
+var yb = -0.5*h
+
+var xc = -0.5
+var yc = 0.5*h
+
+var xd = -(k+0.5)
+var yd = 0.5*h-1
+
+var xe = 0.5
+var ye = 0.5*h
+
+var xf = (k+0.5)
+var yf = 0.5*h-1
+
+
+// Select the end-points on the mesh
+
+var a = Selection(m, fn (x,y,z) abs(x-xa)<0.01 && abs(y-ya)<0.01)
+a.addgrade(0)
+var b = Selection(m, fn (x,y,z) abs(x-xb)<0.01 && abs(y-yb)<0.01)
+b.addgrade(0)
+var c = Selection(m, fn (x,y,z) abs(x-xc)<0.01 && abs(y-yc)<0.01)
+c.addgrade(0)
+var d = Selection(m, fn (x,y,z) abs(x-xd)<0.01 && abs(y-yd)<0.01)
+d.addgrade(0)
+var e = Selection(m, fn (x,y,z) abs(x-xe)<0.01 && abs(y-ye)<0.01)
+e.addgrade(0)
+var f = Selection(m, fn (x,y,z) abs(x-xf)<0.01 && abs(y-yf)<0.01)
+f.addgrade(0)
+
+var fix_ends = true // Flag to indicate whether the end-points should be fixed.
+
+// Add symmetries       
+
+// Impose discrete translation symmetry in x direction for points d and f
+var tx = Translate(disp_x)
+var ends_x = d.union(f) 
+m.addsymmetry(tx, ends_x)
+
+// Impose discrete translation symmetry in y direction for points a, c, b and e
+var ty = Translate(disp_y)
+var ends_y = a.union(c.union(b.union(e)))
+m.addsymmetry(ty, ends_y)
+
+// Set-up the problem
+var problem = OptimizationProblem(m)
+
+// Add Hertzian sphere potential 
+
+// define the cutoff for the Hertzian potential
+var sigma = dx
+// var lv = PairwisePotential(fn (r) cutoff(r, (1-r/sigma)^(5/2), sigma), fn (r) cutoff(r, -5/(2*sigma)*(1-r/sigma)^(3/2), sigma))
+var lv = PairwisePotential(fn (r) (1-r/sigma)^(5/2), fn (r) -5/(2*sigma)*(1-r/sigma)^(3/2), cutoff=sigma)
+problem.addenergy(lv, prefactor=100) // Using a large prefactor to ensure impenetrability
+
+// Add line curvature and length energies
+var lc = LineCurvatureSq()
+var len = Length()
+
+problem.addenergy(len)
+problem.addenergy(lc)
+// if (fix_ends){
+//   var ida = a.idlistforgrade(0)[0]
+//   var idb = b.idlistforgrade(0)[0]
+//   var idc = c.idlistforgrade(0)[0]
+//   var idd = d.idlistforgrade(0)[0]
+//   var ide = e.idlistforgrade(0)[0]
+//   var idf = f.idlistforgrade(0)[0]
+
+//   var ids = [ida, idc, idb, ide, idd, idf]
+//   var pts = ["a", "c", "b", "e", "d", "f"]
+
+//   var fa = ScalarPotential(fn (x,y,z) (x-xa)^2+(y-ya)^2+z^2, fn (x,y,z) Matrix([2*(x-xa), 2*(y-ya), 2*z]))
+//   var fb = ScalarPotential(fn (x,y,z) (x-xb)^2+(y-yb)^2+z^2, fn (x,y,z) Matrix([2*(x-xb), 2*(y-yb), 2*z]))
+//   var fd = ScalarPotential(fn (x,y,z) (x-xd)^2+(y-yd)^2+z^2, fn (x,y,z) Matrix([2*(x-xd), 2*(y-yd), 2*z]))
+
+//   var fc = ScalarPotential(fn (x,y,z) (x-xc)^2+(y-yc)^2+z^2, fn (x,y,z) Matrix([2*(x-xc), 2*(y-yc), 2*z]))
+//   var fe = ScalarPotential(fn (x,y,z) (x-xe)^2+(y-ye)^2+z^2, fn (x,y,z) Matrix([2*(x-xe), 2*(y-ye), 2*z]))
+//   var ff = ScalarPotential(fn (x,y,z) (x-xf)^2+(y-yf)^2+z^2, fn (x,y,z) Matrix([2*(x-xf), 2*(y-yf), 2*z]))
+
+//   problem.addlocalconstraint(fa, selection=a)
+//   problem.addlocalconstraint(fb, selection=b)
+//   problem.addlocalconstraint(fd, selection=d)
+  
+//   problem.addlocalconstraint(fc, selection=c)
+//   problem.addlocalconstraint(fe, selection=e)
+//   problem.addlocalconstraint(ff, selection=f)
+// }
+
+
+var opt = ShapeOptimizer(problem, m)
+    var yvals = []
+    for (mi in 0...m.count()) {
+        yvals.append(m.vertexposition(mi)[1])
+    }
+var actualYStretch = max(yvals)-min(yvals)
+print("y-dist is ${actualYStretch} at start")
+
+if (fix_ends){
+
+  opt.fix(ends_x)
+  opt.fix(ends_y)
+
+}
+// opt.ctol = 1e-8
+// opt.steplimit = 0.00001 // 0.00001 works
+opt.stepsize = 0.00001 // 0.00001 works
+// opt.relax(100000)
+// for (i in 1..500){
+  
+
+//     var g = plotmesh(m,grade=1)
+//     var pov = POVRaytracer(g)
+//     pov.viewangle=50
+//     var dist = 5
+//     pov.viewpoint=Matrix([3*cos(i*2*3.14/250),4,5])
+//     pov.light=[Matrix([3,3,5]), Matrix([-3,-3,-5]), Matrix([0,0,8]), Matrix([0,0,-8])]  
+//     pov.render("rope_${i}.pov",display=false)
+//     opt.relax(10)
+
+// }
+
+opt.conjugategradient(10000) // Conjugate gradient works ~150 times faster than relax!
+
+var yvals = []
+for (mi in 0...m.count()) {
+    yvals.append(m.vertexposition(mi)[1])
+}
+var actualYStretch = max(yvals)-min(yvals)
+print("y-dist is ${actualYStretch}")
+
+
+var g2 = plotmesh(m, grade=1)
+g2.title = "After"
+Show(g2)
+//print m.connectivitymatrix(0,0).count()
+m.save("unit_cell.mesh")
+
+/* *** References ***
+
+[1] Markande SG, Matsumoto EA. Knotty knits are tangles on tori. arXiv:200201497 ;Available from: http://arxiv.org/abs/2002.01497
+
+
+*/

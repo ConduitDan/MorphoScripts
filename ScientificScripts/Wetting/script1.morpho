@@ -1,0 +1,68 @@
+import meshtools
+import plot
+import optimize
+
+var vertexlist = [[-0.5,-0.5,0],
+     [-0.5,0.5,0],
+     [0.5,-0.5,0],
+     [0.5,0.5,0],
+     [-0.5,-0.5,1],
+     [-0.5,0.5,1],
+     [0.5,-0.5,1],
+     [0.5,0.5,1]]
+var facelist = [[0,1,5,4],
+     [2,3,7,6],
+     [1,3,7,5],
+     [0,2,6,4],
+     [4,5,7,6]]
+
+var m = PolyhedronMesh(vertexlist, facelist)
+m.addgrade(1)
+
+var window = plotmesh(m, grade=[0, 1, 2])
+window.title = "Before"
+Show(window)
+
+var problem = OptimizationProblem(m)
+
+var boundmesh = Selection(m, boundary=true)
+// energies
+// var st = AreaIntegral(fn (x) 1)
+var st = Area()
+var g = 9.8
+var rho = 1
+var grav = AreaIntegral(fn (x) x[2]*x[2])
+var sigma = 1
+problem.addenergy(st, prefactor=sigma, selection=boundmesh)
+problem.addenergy(grav, prefactor=rho*g, selection=boundmesh)
+
+// adhesion, integrate over bottom bound?
+// var ad = AreaIntegral(fn (x) x[2]*x[2])
+var boundbot = Selection(m, fn(x, y, z) z == 0)
+boundbot.addgrade(1)
+var ad = AreaEnclosed()
+var delta = 0.1
+problem.addenergy(ad, prefactor=-1*delta, selection=boundbot)
+
+// constraints
+var con = VolumeEnclosed()//AreaIntegral(fn (x) x[2])
+problem.addconstraint(con)
+
+// optimization
+var opt = ShapeOptimizer(problem, m)
+
+var mr = MeshRefiner([m, boundmesh, boundbot])
+var refmap = mr.refine()
+for (el in [problem, opt]) el.update(refmap)
+m = refmap[m]
+boundmesh = refmap[boundmesh]
+boundbot = refmap[boundbot]
+
+opt.stepsize = 0.0001
+for (i in 1..20) {
+    opt.relax(2000)
+}
+
+window = plotmesh(m, grade=[0, 1, 2])
+window.title = "After"
+Show(window)

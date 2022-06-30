@@ -1,0 +1,39 @@
+//myMinimalSurfaces
+// some short function to generate minmial surfaces from meshes
+
+import optimize
+import PrettyPlots
+
+fn minimalSuraface(m,stepsize = 0.1,extraE = nil,bndfix = true){
+
+    var problem = OptimizationProblem(m)
+    var area = Area()
+    problem.addenergy(area)
+
+    if (islist(extraE)){
+        for (E in extraE){
+            problem.addenergy(E)
+        }
+    }
+
+    var opt = ShapeOptimizer(problem, m)
+    
+    if (bndfix){
+        var bnd = Selection(m, boundary=true)
+        bnd.addgrade(1)
+        opt.fix(bnd)
+    }
+
+    opt.stepsize = stepsize
+    opt.quiet = false
+    opt.conjugategradient(1000)
+    
+    return m
+}
+
+var problem = OptimizationProblem(m)
+var area = Area()
+problem.addenergy(area)
+
+var opt = ShapeOptimizer(problem, m)
+opt.conjugategradient(1000)

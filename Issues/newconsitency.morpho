@@ -1,0 +1,14 @@
+import meshtools
+import constants
+
+fn mobiusfn(u,v, r = 1, ntwist=1){
+    var th = Matrix([cos(u), 0, sin(u)])
+    var twist = (cos(0.5*ntwist*u)*th + sin(0.5*ntwist*u)*Matrix([0,1,0]))
+    return r*th + v*twist
+}
+fn mobius(r = 1, ratio = 0.5) {
+    var L = 2*r*ratio // Separation
+    var m = AreaMesh(fn(u,v) mobiusfn(u,v,ntwist=-1), -Pi..Pi:Pi/20,-L/2..L/2:L/10, closed=[false,false])
+
+    return m
+}

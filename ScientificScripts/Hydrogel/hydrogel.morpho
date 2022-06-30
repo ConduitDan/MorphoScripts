@@ -1,0 +1,124 @@
+// Hydrogel swelling in presence of confining hard spheres 
+// using Flory-Huggins (FH) energy and linear elasticity
+
+// Import essential modules
+import meshtools
+import plot
+import optimize
+import color
+import povray
+
+// Import a 3d Spherical mesh
+var m = Mesh("spherem2.mesh")
+m.addgrade(1)
+m.addgrade(2)
+
+var mref = m.clone()
+
+// Add line and face elements
+
+mref.addgrade(1)
+mref.addgrade(2)
+
+// Make a class to manufacture axis aligned ellipsoids that will act as the hard spheres
+// To create one, call Ellipsoid(origin, principalradii)
+class Ellipsoid {
+    init(x, r) {
+        self.origin = x
+        self.principalradii = r
+    }
+    
+    // Returns a level set function for this Ellipsoid
+    levelset() {
+        fn phi (x,y,z) {
+            var x0 = self.origin, rr = self.principalradii
+            return ((x-x0[0])/rr[0])^2 + ((y-x0[1])/rr[1])^2 + ((z-x0[2])/rr[2])^2 - 1
+        }
+        return phi
+    }
+    
+    // Returns the a function that returns the gradient
+    // of the level set function for this Ellipsoid
+    gradient() {
+        fn dphi (x,y,z) {
+            var x0 = self.origin, rr = self.principalradii
+            return Matrix([2*(x-x0[0])/rr[0]^2,
+            2*(y-x0[1])/rr[1]^2,
+            2*(z-x0[2])/rr[2]^2])
+        }
+        return dphi
+    }
+}
+
+// Initialize the problem
+var problem = OptimizationProblem(m)
+
+
+// Define initial value of the solute concentration everywhere
+var phi_i = 0.9
+
+// Define the FH parameters
+var fha = 1, fhb = 0.0001, fhc = 0.25
+
+// Add the FH energy
+var lfh = FloryHuggins(mref, a=fha, b=fhb, c=fhc, phi0=phi_i)
+problem.addenergy(lfh)
+
+// Find minimum of FH polynomial
+fn fh (phi) { return fha*phi*log(phi) + fhb*(1-phi)*log(1-phi) + fhc*phi*(1-phi) }
+var eps = 1e-6
+var res = brent([eps, 0.5, 1-eps], fh, 1e-10, 100) // returns [phi_min, fh(phi_min)]
+
+// Add corrective term to ensure positivity of the FH energy
+var lv = Volume()
+problem.addenergy(lv, prefactor = abs(res[1]))
+
+// Add the elastic energy
+var le = LinearElasticity(mref)
+problem.addenergy(le, prefactor=0.1)
+
+// Now use Ellipsoid class defined earlier to manufacture some constraints
+var posns = [[0,2,0], [0,-2,0], [2,0,0], [-2,0,0], [0,0,2], [0,0,-2]]
+for (x in posns) {
+    var ell=Ellipsoid(x, [1,1,1])
+    var cons=ScalarPotential( ell.levelset(), ell.gradient() )
+    problem.addlocalconstraint(cons, onesided=true)
+}
+
+// Initialize the shape optimizer
+var opt = ShapeOptimizer(problem, m)
+
+// Set the stepsize for gradient descent
+opt.stepsize = 0.01
+
+// Set-up for POVRay
+
+var red = Color(1.0,0,0)
+var blue = Color(0,0,1.0)
+
+var s = Selection(m, boundary=true)
+var sref = Selection(mref, boundary=true)
+s.addgrade(1)
+sref.addgrade(1)
+var g
+var g1 = plotmesh(mref,grade=[0,1],color=red)
+var g1 = plotmesh(mref,selection=sref,grade=1,color=red, transmit=0.7)
+
+// Optimize in small steps 
+for (i in 1..100){
+  
+
+    var g2 = plotmesh(m,selection=s,grade=2,color=blue, transmit=0.5)
+    g = g1+g2
+    for (x in posns) {
+        g.display(Sphere(x, 1, transmit=0.9))
+    }
+    var pov = POVRaytracer(g)
+    pov.viewangle=50
+    var dist = 5
+    pov.viewpoint=Matrix([3,4,5])
+    pov.light=[Matrix([3,3,5]), Matrix([-3,-3,-5]), Matrix([0,0,8]), Matrix([0,0,-8])]  
+    pov.render("sphere_${i}.pov",display=false)
+    opt.relax(100)
+
+}

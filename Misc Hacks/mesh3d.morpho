@@ -1,0 +1,56 @@
+import meshtools
+
+var dx = 0.1
+var dy = 0.1
+var dz = 0.1
+var Lx = 1
+var Ly = 1
+var Lz = 0.5
+
+var xRange = -Lx..Lx:dx
+var yRange = -Ly..Ly:dy
+var zRange = -Lz..Lz:dz
+
+fn VolumeMesh(f, r1, r2, r3) {
+	var dim = f(r1[0],r2[0],r3[0]).count()
+	var mb = MeshBuilder(dimension=dim)
+  
+	for (w in r3) for (v in r2) for (u in r1) mb.addvertex(f(u,v,w))
+  
+	var nu = r1.count(), nv = r2.count(), nw = r3.count() // How many points
+	var np = nu*nv*nw
+	var nfaces = (nu-1)*(nv-1)*nw+(nw-1)*(nu-1)*nv + (nv-1)*(nw-1)*nu
+	for (k in 0...nw) {
+	  for (j in 0...nv-1) {
+	    for (i in 0...nu-1) {
+		  mb.addface([i+j*nu + k*nv*nu, i+1+j*nu+k*nv*nu, i+(1+j)*nu+k*nv*nu])
+		  mb.addface([i+1+j*nu+k*nv*nu, i+(1+j)*nu+k*nv*nu, i+(1+j)*nu+k*nv*nu])
+	    }
+	  }
+    }
+	for (k in 0...nw-1) {
+	  for (j in 0...nv) {
+		for (i in 0...nu-1) {
+			mb.addface([i+j*nu + k*nv*nu, i+j*nu+(k+1)*nv*nu, i+1+j*nu+k*nv*nu])
+			mb.addface([i+j*nu+(k+1)*nv*nu, i+1+j*nu+k*nv*nu, i+1+j*nu+k*nv*nu])
+		   }
+	  }
+	}
+	for (k in 0...nw-1) {
+	  for (j in 0...nv-1) {
+		for (i in 0...nu) {
+			mb.addface([i+j*nu + k*nv*nu, i+(1+j)*nu+k*nv*nu, i+j*nu+(1+k)*nv*nu])
+			mb.addface([i+(1+j)*nu+k*nv*nu, i+j*nu+(k+1)*nv*nu, i+j*nu+(1+k)*nv*nu])
+		  }
+	  }
+	}
+	return mb.build()
+}
+
+
+var m = VolumeMesh(fn(x,y,z)[x,y,z],xRange,yRange,zRange)
+
+import plot
+
+
+Show(plotmesh(m,grade = 1))

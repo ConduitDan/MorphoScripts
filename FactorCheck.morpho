@@ -1,0 +1,13 @@
+// growth check
+var h =1.2
+var dy = 0.01
+var Stretch = h
+for (i in 0..100){
+    var desierdStrech = h+i*dy
+
+    var Factor = dy/(h+i*dy)+1
+    var Sfactor = desierdStrech/Stretch
+
+    Stretch = Stretch * Factor
+    print("Stretch = ${Stretch}, desierdStrech is ${desierdStrech}")
+}

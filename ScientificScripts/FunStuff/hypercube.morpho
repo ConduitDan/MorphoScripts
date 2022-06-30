@@ -1,0 +1,38 @@
+//HyperCubeVisualization.morpho
+import meshtools
+import plot
+import constants
+var mb = MeshBuilder(dimension=4)
+var verts = [0,1].tuples(4)
+var lines = []
+for (i in 0...verts.count()) {
+    mb.addvertex(Matrix(verts[i]))
+    for (j in (i+1)...verts.count()){
+        if ((Matrix(verts[i])-Matrix(verts[j])).norm()==1) {
+            mb.addedge([i,j])
+        }
+
+    }
+}
+
+var m = mb.build()
+var mproj = Mesh()
+
+
+var mpos = m.vertexmatrix()
+var mposproj = Matrix(3,verts.count())
+var phi = Pi/4
+var ax = Matrix([1,0,0])
+var a = cos(phi/2)
+var b = ax[0]*sin(phi/2)
+var c = ax[1]*sin(phi/2)
+var d = ax[2]*sin(phi/2)
+var Rot = Matrix([[1,0,0,0],[0,a^2+b^2-c^2-d^2,2*(b*c-a*d),2*(b*d+a*c)],[0,2*(b*c-a*d),a^2-b^2+c^2-d^2,2*(c*d-a*b)],[0,2*(b*d-a*c),2*(c*d+a*b),a^2-b^2+c^2+d^2]])
+for (i in 0...verts.count()) {
+    var pos = Rot*m.vertexposition(i)
+    print pos
+    mposproj.setcolumn(i,pos[0..2])
+}
+
+// Show(plotmesh(m))
+Show(plotmesh(mproj))

@@ -1,0 +1,317 @@
+/*6-13 version that can create tubes just given coordinates of their centers with *relative stability*
+given number of tubes and proximity to the edge*/
+
+
+var kappa = 0.2 //prefactors for the optimization problem - mean curvature squared
+var sigma = 1.5 //prefactors for the optimization problem - area
+
+var itermax = 45 //number of steps taken
+var toPlot = [1, 2, 3, 4, 5, 6, 7] //which steps should be plotted
+var desirednumberoftubes = 1 //how many tubes will we be making?
+var dz = 0.05 //defines the change in height of the region getting pulled in each iteration
+
+import plot
+import meshtools
+import optimize
+import histogram
+import povray
+import meshgen
+
+//create the disk mesh
+var disk = Mesh("disk.mesh")
+
+
+var numberoftubes = 0 //this variable will track how many tubes have already been made
+//we will be storing each of our created centers in an array
+var setofregions[desirednumberoftubes+1]
+for(i in 1..desirednumberoftubes) {setofregions[i] = Selection(disk)}
+//the size gets modified during center creation so we must also store the size of each center seperately
+var size[desirednumberoftubes+1]
+for(i in 1..desirednumberoftubes) {size[i] = 0.15}
+//we also need a selection that is all of the centers combined
+var pullingregion = Selection(disk)
+//similar logic to the size - we want to hold onto the cordinates of our centers, which do get modified during the creation process
+var centerx[desirednumberoftubes + 1]
+var centery[desirednumberoftubes + 1]
+var center = Selection(disk)
+
+//to be used to refine the centers as we create them
+var mr
+var refmap
+
+//function that creates a region centered roughly at (xcenter, ycenter)
+fn makearegion(xcenter, ycenter) {
+    numberoftubes = numberoftubes + 1
+
+    centerx[numberoftubes] = xcenter
+    centery[numberoftubes] = ycenter
+
+    //defines a larger around this specific future tube that gets refined
+    var region = Selection(disk, fn(x,y,z) (x-centerx[numberoftubes])^2 + (y-centery[numberoftubes])^2 < size[numberoftubes]^2*10)
+    region.addgrade(1)
+    region.addgrade(0)
+
+    //refining the region around where will be pulled
+    mr=MeshRefiner([disk, region, center, pullingregion])
+    refmap = mr.refine(selection=region)
+
+    // update the mesh based on the refinement
+    disk = refmap[disk]
+    pullingregion = refmap[pullingregion]
+    center = refmap[center]
+    region = refmap[region]
+    
+    //define the actual part that will get pulled
+    center = Selection(disk, fn(x,y,z) (x-centerx[numberoftubes])^2 + (y-centery[numberoftubes])^2 < size[numberoftubes]*size[numberoftubes])
+    center.addgrade(1)
+    center.addgrade(0)
+
+    //make sure there are a satisfactory number of points in it
+    while((center.count(0) < 5 || center.count(0) > 7)) {
+        if(center.count(0) < 5) {
+            size[numberoftubes] = 1.1*size[numberoftubes]
+            center = Selection(disk, fn(x,y,z) (x-centerx[numberoftubes])^2 + (y-centery[numberoftubes])^2 < size[numberoftubes]*size[numberoftubes])
+        }
+        else if(center.count(0) > 7) {
+            size[numberoftubes] = 0.8*size[numberoftubes]
+            center = Selection(disk, fn(x,y,z) (x-centerx[numberoftubes])^2 + (y-centery[numberoftubes])^2 < size[numberoftubes]*size[numberoftubes])
+        }
+    }
+    
+
+    //based on the points selected, recalculate the center by taking the average of the coordinates
+    var sumofx = 0
+    var sumofy = 0
+    var centerpoints = center.idlistforgrade(0)
+    var positionsofcenterpoints
+
+    var xpos
+    var ypos
+    for(id in 0..centerpoints.count()-1){
+        xpos = disk.vertexposition(centerpoints[id])[0]
+        ypos = disk.vertexposition(centerpoints[id])[1]
+        sumofx = sumofx + xpos
+        sumofy = sumofy + ypos
+    }
+
+    var meanx = sumofx/center.count(0)
+    var meany = sumofy/center.count(0)
+
+    //update the centers that we are storing
+    centerx[numberoftubes] = meanx
+    centery[numberoftubes] = meany
+
+    //and now update the selections again to reflect the new center
+    center = Selection(disk, fn(x,y,z) ((x-meanx)^2 + (y-meany)^2 < size[numberoftubes]*size[numberoftubes]))
+
+    //we redefine the pullingregion every time for ease
+    pullingregion = center
+
+    //store this selection
+    setofregions[numberoftubes] = center
+    print size[numberoftubes]
+    //we have to redefine all our previously selected centers because our refinement may have changed stuff
+    for (i in 1..numberoftubes-1){
+        setofregions[i] = Selection(disk, fn(x,y,z) (x-centerx[i])^2 + (y-centery[i])^2 < size[i]*size[i])
+        pullingregion = pullingregion + setofregions[i]
+    }
+}
+
+//selects the different regions
+makearegion(0, 0)
+pullingregion.addgrade(0)
+pullingregion.addgrade(1)
+
+//creates the functionals
+var area = Area()
+var mcs = MeanCurvatureSq()
+var le = Length()
+
+
+
+//define the boundary
+var bnd = Selection(disk, boundary = true)
+bnd.addgrade(0)
+
+//creates the "pulling"
+var hook = ScalarPotential(fn (x,y,z) z -dz, fn (x,y,z) Matrix([0,0,1]))
+
+//defines the optimization problem
+var problem = OptimizationProblem(disk)
+
+//establishes the constraints
+problem.addenergy(area, prefactor=sigma)
+problem.addenergy(mcs, prefactor=2*kappa) //factor of 2 comes from the equation
+problem.addlocalconstraint(hook, selection = pullingregion)
+
+//creates the regularizer
+var leq=EquiElement()
+var reg = OptimizationProblem(disk)
+reg.addenergy(leq)
+reg.addlocalconstraint(hook, selection = pullingregion)
+
+//creates the optimizers and fixes the boundaries of the disk
+var opt = ShapeOptimizer(problem, disk)
+opt.quiet = true
+var ropt = ShapeOptimizer(reg, disk)
+ropt.quiet = true
+opt.fix(bnd)
+opt.stepsize = 0.001
+ropt.fix(bnd)
+
+var threshold = 1.45
+
+fn checkMatrix(check,message){
+    var dim = check.dimensions()
+    for (n1 in 0...dim[0]) {
+        for (n2 in 0...dim[1]) {
+            if (isnan(check[n1,n2])){
+                print "(${n1}, ${n2}) = ${check[n1,n2]}"
+                print message
+                return false
+            }
+        }
+    }
+
+}
+fn checkMesh(m,message) {
+    var check = m.vertexmatrix()
+    if(!checkMatrix(check,message)) return false
+    // now try saving and loading
+    m.save("test.mesh")
+    Mesh("test.mesh")
+    return true
+}
+
+//actually does the optimization and refinement
+for(i in 1..5) {
+    print i
+    //does the optimization
+    for(k in 1..6) {
+        print "k = ${k}"
+        if (i == 5) {
+            print disk.connectivitymatrix(0,1).rowindices(332)
+            print disk.connectivitymatrix(1,2).rowindices(332)
+            print disk.vertexposition(disk.connectivitymatrix(0,1).rowindices(332)[0])
+            print disk.vertexposition(disk.connectivitymatrix(0,1).rowindices(332)[1])
+
+        }
+        for (optiter in 0...20) { 
+            var oldDisk = disk.clone()
+            opt.relax(1)
+            if (!checkMesh(disk,"opt.relax(${optiter})")){
+                checkMatrix(area.integrand(oldDisk),"Area Integrand")
+                checkMatrix(area.gradient(oldDisk),"Area Gradient")
+                checkMatrix(mcs.integrand(oldDisk),"MCS Integrand")
+                checkMatrix(mcs.gradient(oldDisk),"MCS Gradient")
+            }
+        }
+        if (i == 5) break
+        
+        
+        if (i < 35) {
+            opt.relax(floor(1/10))
+            // checkMesh(disk,"opt.relax(floor(1/10))")
+
+        }
+        //regularizes the mesh
+        leq.weight=le.integrand(disk)
+        ropt.stepsize=0.0007/i
+        ropt.steplimit=0.0007/i
+
+        //skips the regularization the first few times because it helps with stability
+        if (i > 4 && i <= 10) {
+            // if(!checkMesh(disk,"b4 ropt.relax(10)")){
+                // print leq.weight
+                // break
+            // }                
+            
+            // print "equielment integral"
+            // print leq.integrand(disk)
+            // print "equielment grad"
+            // print leq.gradient(disk)
+
+            // look at vertex 8
+            // print disk.connectivitymatrix(0,1).rowindices(8)
+            // print disk.connectivitymatrix(0,2).rowindices(8)
+            // print disk.connectivitymatrix(1,0).rowindices(8)
+            // print disk.connectivitymatrix(2,0).rowindices(8)
+            // disk.save("breakingBad.mesh")
+
+            ropt.relax(10)
+            // if(!checkMesh(disk,"ropt.relax(10)")){
+            //     // print "weight"
+            //     // print leq.weight
+            //     // print "equielment integra"
+            //     // print leq.integrand(disk)
+            //     break
+            // }
+
+        }
+        if (i > 10 && i<=20) {ropt.relax(15)}
+        if (i < 24 && i > 20) {ropt.relax(25)}
+        if (i >= 24) {ropt.relax(40)}
+        if (i > 30) {ropt.relax(5)}
+        if (i >= 35) {ropt.relax(10)}
+        if (i > 40) {ropt.relax(10)}
+    }
+
+    equiangulate(disk)
+
+    //update the new target height
+    dz = dz + 0.04
+
+    // Select line segments that are more than 1.45*mean length for later refinement
+    var en = le.integrand(disk) 
+    var mean = en.sum()/en.count()
+    var srefine = Selection(disk)
+    srefine.addgrade(0)
+    srefine.addgrade(1)
+
+    for (id in 0...en.count()) {
+        if (en[0,id]>threshold*mean) {
+            //marks specific edges for later refinement
+            srefine[1,id]=true
+        }
+        
+        //i don't know that this line is strictly necessary but it 
+        //makes sure that things we don't want refined aren't refined
+        else{srefine[1,id]=false}
+    }
+    
+    //creates the mesh refiner
+    mr=MeshRefiner([disk, bnd, pullingregion])
+    if (srefine.count(1)>0) {
+        //actually does the refinement of the previously selected selection
+        refmap = mr.refine(selection=srefine)
+
+        // Now refinement is done update the problems and optimizers
+        for (el in [problem, reg, ropt, opt]) el.update(refmap)
+        
+        //updates the mesh and selections
+        disk = refmap[disk]
+        bnd = refmap[bnd]
+        pullingregion = refmap[pullingregion]
+
+        // Must ensure boundary remains correctly fixed.
+        ropt.fixed=[]
+        ropt.fix(Selection(disk, boundary = true))
+        opt.fixed=[]
+        opt.fix(Selection(disk, boundary = true))
+        
+        equiangulate(disk)
+        // print "refined!"
+        // checkMesh(disk,"refined")
+    }
+
+    //show the mesh
+    // if(toPlot.ismember(i)){
+    //     var g = plotmesh(disk, grade = [1,2])
+    //     g.background = White
+    //     g.title = "Step ${i}"
+    //     // Show(g)
+
+    //     disk.save("iter${i}.mesh")
+    // }
+}
+

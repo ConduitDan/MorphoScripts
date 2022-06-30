@@ -1,0 +1,96 @@
+import meshtools
+import plot
+import optimize
+var cube = PolyhedronMesh(
+    [[-0.5,-0.5,0],
+     [-0.5,0.5,0],
+     [0.5,-0.5,0],
+     [0.5,0.5,0],
+     [-0.5,-0.5,1],
+     [-0.5,0.5,1],
+     [0.5,-0.5,1],
+     [0.5,0.5,1]],
+    [[0,1,5,4],
+     [2,3,7,6],
+     [1,3,7,5],
+     [0,2,6,4],
+     [4,5,7,6]])
+// Show(plotmesh(cube, grade=[0,1,2]))
+cube.addgrade(1)
+var problem = OptimizationProblem(cube)
+// surface tension
+var la=Area()
+//var la=AreaIntegral(fn(x) 1)
+// this is the bottom boundary
+var bnd=Selection(cube, boundary=true)
+var sigma = 1
+problem.addenergy(la, prefactor=sigma)
+//
+// gravity
+var rho = 1
+var g = 9.8
+var laa=AreaIntegral(fn (x) (x[2]^2)/2)
+problem.addenergy(laa, prefactor=rho*g)
+//
+// adhesion
+var deltaSigma = 0.1
+var laaa = AreaEnclosed()
+problem.addenergy(laaa, selection=bnd, prefactor=-1*deltaSigma)
+//
+// volume constraint
+var lv = VolumeEnclosed()
+problem.addconstraint(lv)
+
+// pin bnd vertices to the bottom
+fn inPlane(x,y,z) {return z}
+fn inPlaneGrad(x,y,z){return Matrix([0,0,1])}
+var pin = ScalarPotential(inPlane,inPlaneGrad)
+problem.addlocalconstraint(pin,selection = bnd)
+
+
+//
+var opt = ShapeOptimizer(problem, cube)
+opt.quiet = true
+opt.stepsize = 0.001
+var refmax = 3
+var relaxMax = 5
+
+
+for (refiter in 1..relaxMax) {
+    print "===Refinement level ${refiter}==="
+    opt.relax(1000)
+
+    //opt.conjugategradient(100) these throw errors
+    //opt.linesearch(100) these throw errors
+    if (refiter==refmax) break
+    // Refinement
+    
+    var mr=MeshRefiner([cube, bnd])
+    // Set the refiner up
+    // args: mesh, field, selection
+    
+    var refmap=mr.refine()
+    // Perform the refinement
+    bnd = 
+    // Tell any other objects that refer to the mesh, fields or selections to update their references using refmap
+    for (el in [problem, opt]) el.update(refmap) // Update the problem
+    // Update our own references
+    cube=refmap[cube]; bnd=refmap[bnd] // Update variables
+
+    print bnd.count(0)
+    // bnd=Selection(cube, boundary=true)
+    // problem = OptimizationProblem(cube)
+    // bnd=Selection(cube, boundary=true)
+    // problem.addenergy(la, prefactor=sigma)
+    // problem.addenergy(laa, prefactor=rho*g)
+    // problem.addconstraint(lv)
+    // problem.addenergy(laaa, selection=bnd, prefactor=-1*deltaSigma)
+    // problem.addlocalconstraint(pin,selection = bnd)
+    // opt = ShapeOptimizer(problem, cube)
+    // opt.quiet = true
+    // opt.stepsize = 0.001
+
+}
+//print lv.total(cube)
+//Show(plotmesh(cube, grade=[0,1,2]))
+Show(plotselection(cube,bnd,grade=[0,1,2]))

@@ -1,0 +1,245 @@
+// A libray of meshes for myself
+// Author: Danny Goldstein
+
+import meshtools
+import symmetry
+import constants
+
+fn addSymmetryToKnit(m,h,k,N,M,fix_ends = false){
+    /* List the x-y coordinates of the end-points.
+
+    The end points are labeled like so:
+          c   e
+        _ |_ _| _ 
+       |  |   |  |
+    d---\-'   '-/---f
+         \     /
+         a     b
+
+    Thus, for the periodicity, 
+    a <-> c
+    b <-> e
+    d <-> f
+
+    d a b are alway taken to be on the bottom/left of the knit
+    c e f are ont the top/right
+    */
+    // loop over units in X direction adding bottom/top symmetry 
+    // I.E. a <-> c, b <-> e
+    var dx = (1 + 2*k)
+    var dy = h
+
+    var disp_x = Matrix([(1+2*k)*N, 0, 0]) // This is the discrete period of the knit in the x direction
+    var disp_y = Matrix([0, h*M, 0]) // This is the discrete period of the knit in the y direction
+
+    var ty = Translate(disp_y)
+
+    var ends_yT = Selection(m)
+    var ends_xT = Selection(m)
+    for (i in 0...N){
+        
+        var xa = -0.5 + i * dx
+        var ya = -0.5*h
+
+        var xb = 0.5 + i * dx
+        var yb = -0.5*h
+
+        var xc = -0.5 + i * dx
+        var yc = 0.5*h + dy * (M-1)
+
+        var xe = 0.5 + i * dx
+        var ye = 0.5*h + dy * (M-1)
+
+        var a = Selection(m, fn (x,y,z) abs(x-xa)<0.01 && abs(y-ya)<0.01)
+        a.addgrade(0)
+        var b = Selection(m, fn (x,y,z) abs(x-xb)<0.01 && abs(y-yb)<0.01)
+        b.addgrade(0)
+        var c = Selection(m, fn (x,y,z) abs(x-xc)<0.01 && abs(y-yc)<0.01)
+        c.addgrade(0)
+        var e = Selection(m, fn (x,y,z) abs(x-xe)<0.01 && abs(y-ye)<0.01)
+        e.addgrade(0)
+
+
+        // Impose discrete translation symmetry in y direction for points a, c, b and e
+        var ends_y = a.union(c.union(b.union(e)))
+        ends_yT = ends_yT.union(ends_y)
+
+        m.addsymmetry(ty, ends_y)
+    }
+
+    var tx = Translate(disp_x)
+
+    for (j in 0...M){
+
+        var xd = -(k+0.5)
+        var yd = 0.5*h-1 + dy * j
+
+        var xf = (k+0.5) + dx * (N-1)
+        var yf = 0.5*h-1 + dy * j
+
+        // Select the end-points on the mesh
+
+        var d = Selection(m, fn (x,y,z) abs(x-xd)<0.01 && abs(y-yd)<0.01)
+        d.addgrade(0)
+        var f = Selection(m, fn (x,y,z) abs(x-xf)<0.01 && abs(y-yf)<0.01)
+        f.addgrade(0)
+        
+        // Add symmetries       
+        // Impose discrete translation symmetry in x direction for points d and f
+        var ends_x = d.union(f) 
+        ends_xT = ends_xT.union(ends_x)
+        m.addsymmetry(tx, ends_x)
+    }
+
+    return [tx,ty,ends_xT,ends_yT]
+}
+
+fn knitStart(h = 1.2, k = 0.5, dx = 0.05, N = 10, M = 10){
+    // N Number of unit cells in x dir
+    // M Number of unit cells in y dir
+
+
+    // var h = 1.2 // Decides the vertical spacing between the knits. This number is eye-balled right now
+    // var k = 0.5 // ratio of the minor axis to the major axis of the ellipse 
+    // var dx = 0.05*Pi
+    dx = dx * Pi
+
+    var m1 = LineMesh(fn (t) [k*sin(t)-(k+0.5), 0.5*h+cos(t), 0], 0.5*Pi..Pi:dx, closed=false) // Left thread of the ellipse
+    var m2 = LineMesh(fn (t) [k*sin(t)+(k+0.5), 0.5*h+cos(t), 0], -0.5*Pi..-Pi:(-dx), closed=false) // Right thread of the ellipse
+    var m3 = LineMesh(fn (t) [sin(t)*(0.5 + cos(t)^2), cos(t)-0.5*h, 0.5*cos(3*t)], -0.5*Pi..0.5*Pi:dx, closed=false) // Part of the dumbbell curve
+
+    var merge = MeshMerge([m1])
+    merge.addmesh([m2])
+    merge.addmesh([m3])
+    
+    var merge = MeshMerge([m1,m2,m3])
+    var m = merge.merge()
+
+    // now we have the unit cell make an NxM grid of them
+    var unitCellMerge = MeshMerge([])
+    for (i in 0...N){
+        for (j in 0...M){
+            var newM = m.clone()
+            for (mi in 0...newM.count()) {
+                newM.setvertexposition(mi,newM.vertexposition(mi) + Matrix([2*(0.5+k)*(i),(h)*(j),0]))
+            }
+            unitCellMerge.addmesh([newM])
+        }
+    }
+    var finalM = unitCellMerge.merge()
+
+    finalM.addgrade(1)
+    var sym = addSymmetryToKnit(finalM,h,k,N,M)
+    return [finalM,sym[0],sym[1],sym[2],sym[3]]
+}
+
+
+
+
+fn cylinder (r = 1.0, ratio = 0.6) {
+
+    //r radius
+    //ratio Separation to diameter ratio
+
+    var r = 1.0 //radius
+    var ratio = 0.6 //height to diameter ratio
+    var L = 2*r*ratio // Separation
+    var m = AreaMesh(fn (u, v) [r*cos(u), v, r*sin(u)],  -Pi...Pi:Pi/20,-L/2..L/2:L/10, closed=[true,false])
+    
+    
+    
+    m.addgrade(0)
+    m.addgrade(1)
+    return m
+
+}
+fn mobiusfn(u,v, r = 1, ntwist=1){
+    var th = Matrix([cos(u), 0, sin(u)])
+    // print sin(0.5*twist*u)
+    var twist = (cos(0.5*ntwist*u)*th + sin(0.5*ntwist*u)*Matrix([0,1,0]))
+    return r*th + v*twist
+}
+fn mobius(r = 1, ratio = 0.5) {
+    //var r = 1.0 // radius
+    //var ratio = 0.5 // Separation to diameter ratio
+
+    var upper_bound = Pi/sqrt(3)
+
+    //print ratio/upper_bound
+    if (ratio>upper_bound) {
+        print "Separation too large!"  
+    } 
+    var L = 2*r*ratio // Separation
+
+
+    // Define a parametrization for the Möbius strip
+    var m = AreaMesh(fn(u,v) mobiusfn(u,v,r=r,ntwist=-1), -Pi..Pi:Pi/20,-L/2..L/2:L/10, closed=[false,false])
+
+    // m.addgrade(0)
+    m.addgrade(1)
+
+    var merger = MeshMerge([m]) // This is required to fix the issue of joining the opposite ends of the strip together
+    m = merger.merge()
+    //refinemesh(m)
+    return m
+}
+
+
+fn reflect(mesh, axis) {
+  var rmat = Matrix([[1,0,0],[0,1,0],[0,0,1]])
+  if (isint(axis)) rmat[axis,axis]*=-1
+  if (islist(axis)) for (i in axis) rmat[i,i]*=-1
+  var m = mesh.clone()
+  var vert = m.vertexmatrix()
+  for (vid in 0...m.count()) {
+    vert.setcolumn(vid, rmat * vert.column(vid))
+  }
+  return m
+}
+fn threePStart(){
+    var vertices = [[0,0,0.5], [0.5,0,0.5],
+                [0.5,0.5,0.5], [0,0.5,0.5],
+                [0.5,0,1], [0.5,0.5,1],
+                [0,0.5,0], [0.5,0.5,0],
+                [0.5,1,0], [0.5,1,0.5],
+                [1,0.5,0.5], [1,1,0.5],
+                [1,0.5,1], [0.5,0.5,1]]
+    var faces = [ [0,1,2,3],
+                [1,2,5,4],
+                [2,3,6,7],
+                [2,9,8,7],
+                [10,11,9,2],
+                [12,13,2,10] ]
+// Create the rest of the mesh by reflection
+
+    var m1 = PolyhedronMesh(vertices, faces)
+    // Merge reflected meshed together
+    var merge = MeshMerge([ m1,
+                            reflect(m1, 0),
+                            reflect(m1, 1),
+                            reflect(m1, 2),
+                            reflect(m1, [0,1]),
+                            reflect(m1, [1,2]),
+                            reflect(m1, [2,0]),
+                            reflect(m1, [0,1,2])
+                        ])
+    var m = merge.merge()
+    // m.addgrade(1)
+    //print m.vertexmatrix()
+    refinemesh(m)
+    // m = refinemesh(m)
+    //Show(plotmesh(m, grade=[0,2]))
+    // Add translational symmetries to each side
+    var sx = Selection(m, fn(x,y,z) abs(x+1)<1e-10 || abs(x-1)<1e-10)
+    var tx = Translate(Matrix([2,0,0]))
+    var sy = Selection(m, fn(x,y,z) abs(y+1)<1e-10 || abs(y-1)<1e-10)
+    var ty = Translate(Matrix([0,2,0]))
+    var sz = Selection(m, fn(x,y,z) abs(z+1)<1e-10 || abs(z-1)<1e-10)
+    var tz = Translate(Matrix([0,0,2]))
+
+    m.addsymmetry(tx, sx)
+    m.addsymmetry(ty, sy)
+    m.addsymmetry(tz, sz)
+    return m 
+
+}

@@ -1,0 +1,19 @@
+import functionals
+import optimize
+import meshtools
+
+var r = 1.0 //radius
+var ratio = 0.6 //height to diameter ratio
+var L = 2*r*ratio // Separation
+var m = AreaMesh(fn (u, v) [r*cos(u), v, r*sin(u)],  -Pi...Pi:Pi/20,-L/2..L/2:L/10, closed=[true,false])
+
+var problem = OptimizationProblem(m)
+var area = Area()
+problem.addenergy(area)
+
+var opt = ShapeOptimizer(problem, m)
+var bnd = Selection(m, boundary=true)
+opt.fix(bnd)
+opt.relax(100)
+
+

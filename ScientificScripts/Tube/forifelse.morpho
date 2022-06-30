@@ -1,0 +1,9 @@
+
+
+for (i in 0..3) if (i==2){
+    print "found the if" 
+}
+
+else {print "found the else"}
+
+print "at the end"

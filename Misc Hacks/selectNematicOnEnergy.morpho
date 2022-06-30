@@ -1,0 +1,28 @@
+    
+var m = Mesh("disk.mesh") // the mesh
+var nn = Field(m, Matrix([1,0,0])) // 
+var lf=Nematic(nn, kbend=1)
+
+var en = lf.integrand(nn)
+var mean = en.sum()/en.count()
+var s = Selection(m)
+for (id in 0...en.count()) if (en[0,id]>1.5*mean) s[2,id]=true
+
+// Create a mesh refiner
+mr=MeshRefiner([m, nn, bnd])
+if (srefine.count(2)>0) {
+    refmap = mr.refine(selection=srefine)
+} else {
+    refmap = mr.refine()
+}
+
+// Now refinement is done update the problems and optimizers
+for (el in [problem, reg, sopt, fopt, ropt]) el.update(refmap)
+
+// Use the new mesh and field
+m = refmap[m]
+nn = refmap[nn]
+bnd = refmap[bnd]
+// Must ensure boundary remains correctly fixed
+ropt.fixed=[]
+ropt.fix(Selection(m, boundary=true))

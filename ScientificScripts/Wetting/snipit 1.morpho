@@ -1,0 +1,35 @@
+class Surface {
+    getPinningFunctional(){
+        return ScalarPotential(self.getEnergy,self.getGradE)
+    }
+    getTitle() { return "${self.name}"}
+}
+class PlanarSurface is Surface{
+    init(n = Matrix([0,0,1]), point = Matrix([0,0,-0.5])) {
+        self.normal = n
+        self.point = point
+        self.name = "Plane" 
+    }
+    getEnergy(x,y,z) {return self.normal.inner(Matrix([x,y,z])-self.point)}
+    getGradE(x,y,z) {return self.normal}
+}
+
+class CylindricalSurface is Surface {
+    init(r, center){
+        self.r = r
+        self.center = center
+        self.name = "Cylinder r = ${self.r}"
+    }
+    getEnergy(x,y,z) { return y^2+(z-self.center[2])^2-self.r^2}
+    getGradE(x,y,z) { return Matrix([0,2*y,2*(z-self.center[2])])}
+}
+
+class SphericalSurface is Surface {
+    init(r,center){
+        self.r = r
+        self.center = center
+        self.name = "Sphere r = ${self.r}"
+    }
+    getEnergy(x,y,z) { return (x-self.center[0])^2+(y-self.center[1])^2 +(z-self.center[2])^2-self.r^2 }
+    getGradE(x,y,z) { return Matrix([2*(x-self.center[0]),2*(y-self.center[1]),2*(z-self.center[2])])}
+}

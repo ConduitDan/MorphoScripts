@@ -1,0 +1,5 @@
+// chek this mesh
+
+var m = Mesh("breakingBad.mesh")
+var leq=EquiElement()
+print leq.integrand(m)

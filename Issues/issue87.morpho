@@ -1,0 +1,6 @@
+var str = "a b c d f g"
+var w
+var c
+for (i in 1..10){
+    print str.split(" ")
+}

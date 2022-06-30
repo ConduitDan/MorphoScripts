@@ -1,0 +1,78 @@
+/*
+This script computes the shape of a soap film attached to two circular rings separated vertically.
+The surface tension minimizes the area of this film, resulting in the minimal surface called a "catenoid".
+*/
+
+import meshtools
+import plot
+import optimize
+import povray
+
+
+var r = 1.0 // radius
+var ratio = 0.6 // Separation to diameter ratio
+
+var upper_bound = Pi/sqrt(3)
+
+print ratio/upper_bound
+if (ratio>upper_bound){
+    print "Separation too large!"  
+} 
+
+var L = 2*r*ratio // Separation
+
+// Generate a tube mesh
+var m = AreaMesh(fn (u, v) [r*cos(u), v, r*sin(u)], -Pi...Pi:Pi/10,-L/2..L/2:L/5, closed=[true,false])
+// m.addgrade(0)
+m.addgrade(1)
+
+m = refinemesh(m)
+var mc = MeanCurvatureSq()
+
+// print mc.total(m)
+var bnd = Selection(m, boundary=true)
+// bnd.addgrade(0)
+// bnd.removegrade(0)
+bnd.addgrade(1)
+
+var g = plotselection(m, bnd, grade=[1,2])
+g.title = "Before"
+Show(g)
+var pov = POVRaytracer(g)
+pov.viewangle=50
+
+
+pov.viewpoint=Matrix([3,4,5])
+pov.light=[Matrix([3,3,5]), Matrix([-3,-3,-5]), Matrix([0,0,8]), Matrix([0,0,-8])]  
+pov.render("catenoid_before.pov",quiet=true,display=false)
+
+
+var problem = OptimizationProblem(m)
+var area = Area()
+problem.addenergy(area)
+// problem.addenergy(mc)
+
+var opt = ShapeOptimizer(problem, m)
+opt.fix(bnd)
+
+opt.stepsize = 0.1
+opt.quiet = false
+opt.conjugategradient(1000)
+
+// import histogram
+// histogram(mc.integrand(m), 5)
+var pov = POVRaytracer(g)
+pov.viewangle=50
+
+// print mc.total(m)
+g = plotselection(m, bnd, grade=1)
+// g.title = "After"
+// Show(g)
+// var theta = 0
+// for (i in 0..90){
+//     theta = 2*Pi*i/90
+//     pov.viewpoint=Matrix([3*cos(theta),4,5])
+//     pov.light=[Matrix([3,3,5]), Matrix([-3,-3,-5]), Matrix([0,0,8]), Matrix([0,0,-8])]  
+//     pov.render("catenoid_${i}.pov",quiet=true,display=false)
+// }
+// //ffmpeg -r 30 -f image2 -s 1920x1080 -i catenoid_%d.png -vcodec libx264 -crf 25 -pix_fmt yuv420p catiniod.mp4

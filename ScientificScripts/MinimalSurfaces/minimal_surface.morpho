@@ -1,0 +1,125 @@
+import meshtools
+import plot
+import optimize
+import symmetry
+import povray
+import "../../MorphoCommon/PrettyPlots.morpho"
+
+
+// Construct upper octant
+var vertices = [[0,0,0.5], [0.5,0,0.5],
+                [0.5,0.5,0.5], [0,0.5,0.5],
+                [0.5,0,1], [0.5,0.5,1],
+                [0,0.5,0], [0.5,0.5,0],
+                [0.5,1,0], [0.5,1,0.5],
+                [1,0.5,0.5], [1,1,0.5],
+                [1,0.5,1], [0.5,0.5,1]]
+var faces = [ [0,1,2,3],
+              [1,2,5,4],
+              [2,3,6,7],
+              [2,9,8,7],
+              [10,11,9,2],
+              [12,13,2,10] ]
+// Create the rest of the mesh by reflection
+fn reflect(mesh, axis) {
+  var rmat = Matrix([[1,0,0],[0,1,0],[0,0,1]])
+  if (isint(axis)) rmat[axis,axis]*=-1
+  if (islist(axis)) for (i in axis) rmat[i,i]*=-1
+  var m = mesh.clone()
+  var vert = m.vertexmatrix()
+  for (vid in 0...m.count()) {
+    vert.setcolumn(vid, rmat * vert.column(vid))
+  }
+  return m
+}
+var m1 = PolyhedronMesh(vertices, faces)
+// Merge reflected meshed together
+var merge = MeshMerge([ m1,
+                        reflect(m1, 0),
+                        reflect(m1, 1),
+                        reflect(m1, 2),
+                        reflect(m1, [0,1]),
+                        reflect(m1, [1,2]),
+                        reflect(m1, [2,0]),
+                        reflect(m1, [0,1,2])
+                      ])
+var m = merge.merge()
+// m.addgrade(1)
+Show(plotmesh(m, grade=[2]))
+// m = refinemesh(m)
+// // m = refinemesh(m)
+// //Show(plotmesh(m, grade=[0,2]))
+// // Add translational symmetries to each side
+// var sx = Selection(m, fn(x,y,z) abs(x+1)<1e-10 || abs(x-1)<1e-10)
+// var tx = Translate(Matrix([2,0,0]))
+// var sy = Selection(m, fn(x,y,z) abs(y+1)<1e-10 || abs(y-1)<1e-10)
+// var ty = Translate(Matrix([0,2,0]))
+// var sz = Selection(m, fn(x,y,z) abs(z+1)<1e-10 || abs(z-1)<1e-10)
+// var tz = Translate(Matrix([0,0,2]))
+
+// m.addsymmetry(tx, sx)
+// m.addsymmetry(ty, sy)
+// m.addsymmetry(tz, sz)
+// var sbnd = sx.union(sy).union(sz)
+// // sbnd.addgrade(1)
+// Show(plotselection(m, sbnd, grade=[1]))
+// print m.connectivitymatrix(0,0)
+// var pp = PrettyPrinter(mesh = m,grade = 2)
+// //pp.animate("3pstart.mp4",dist = 10)
+
+// // Create the OptimizationProblem
+// var problem = OptimizationProblem(m)
+// var la = problem.addenergy(Area(), prefactor = 1)
+// var lmc = problem.addenergy(MeanCurvatureSq(), prefactor = 0)
+
+// // Create the Optimizer
+// var opt = ShapeOptimizer(problem, m)
+// opt.stepsize = 0.0001
+// opt.steplimit = 0.1
+
+// // Create a regularizer
+// var reg = OptimizationProblem(m)
+// var leq = EquiElement()
+// reg.addenergy(leq)
+
+// var ropt = ShapeOptimizer(reg, m)
+// ropt.stepsize = 0.000001
+// ropt.fix(sbnd)
+
+// // Begin by minimizing the area approximatel-10
+// // opt.conjugategradient(100)
+// // equiangulate(m)
+
+// lmc.prefactor = 1
+// la.prefactor = 0
+
+
+
+// //opt.conjugategradient(1000)//protocal = opt.conjugategradient
+// pp.animateMinimization(opt,"3PMinimization.mp4",1000,dist = 10,framerate = 30,camera = Matrix([1,0,1]))
+// var mcsq = MeanCurvatureSq(m)
+
+// var mcsqi = mcsq.integrand(m)
+// var f = Field(m, 1.0)
+
+// for (i in 0...m.count()) f[i] = mcsqi[0,i]
+
+// print mcsq.total(m)
+// //opt.linesearch(100)
+// // for (i in 1..100) {
+// //   opt.conjugategradient(100)
+// //   ropt.relax(20)
+// //   equiangulate(m)
+// // }
+// print m.connectivitymatrix(0,0)
+
+// //pp.animate("3P.mp4",dist = 10)
+
+// // var g = plotmesh(m, grade=[2])
+// // var g2 = plotfield(f, style="interpolate")
+// // Show(g)
+// // Show(g2)
+// // var pov = POVRaytracer(g)
+// // pov.render("Minimal_Surface.pov",quiet=true,display=false)
+// // pov = POVRaytracer(g2)
+// // pov.render("Minimal_Surface_Fields.pov",quiet=true,display=false)
