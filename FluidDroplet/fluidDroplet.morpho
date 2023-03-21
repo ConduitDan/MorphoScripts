@@ -1,0 +1,119 @@
+import implicitmesh
+import plot
+import functionals
+import optimize
+
+class elasticFunctional{
+    init(k,l0_in) {
+        self.k = k
+        self.l0 = l0_in
+    }
+    integrand(mesh){
+        // get the mesh lines
+        var lineToVert = mesh.connectivitymatrix(0,1)
+        var numLines = lineToVert.dimensions()[1]
+        var vmat = mesh.vertexmatrix()
+        var out = Matrix(1,numLines)
+        for (var i in 0...numLines) {
+            var ev=lineToVert.rowindices(i) // vertices for this edge
+            // go over dimesnions
+            var l = 0
+            for (var k in 0...3){
+                l += (vmat[k,ev[0]]-vmat[k,ev[1]])^2
+            }
+            l = sqrt(l)
+            out[0,i] = 1/2*self.k*(l-self.l0)^2
+        }
+        return out
+    }
+    total(mesh){
+        return self.integrand(mesh).sum()
+        
+
+    }
+    gradient(mesh){
+        // whoops these need to be on the vertecies and be an actual gradient
+        
+        var lineToVert = mesh.connectivitymatrix(0,1)
+        var numLines = lineToVert.dimensions()[1]
+        var vmat = mesh.vertexmatrix()
+        var numvert = vmat.dimensions()[1]
+        var out = Matrix(3,numvert)
+        for (var i in 0...numLines) {
+            var ev=lineToVert.rowindices(i) // vertices for this edge
+            // go over dimesnions
+            
+            var dx = vmat[0,ev[0]]-vmat[0,ev[1]]
+            var dy = vmat[1,ev[0]]-vmat[1,ev[1]]
+            var dz = vmat[2,ev[0]]-vmat[2,ev[1]]
+            var l = sqrt(dx^2+dy^2+dz^2)
+            if (l == 0) l+=1e-15
+            out[0,ev[0]] += 2*self.k*dx/l*(l-self.l0)
+            out[0,ev[1]] -= 2*self.k*dx/l*(l-self.l0)
+            out[1,ev[0]] += 2*self.k*dy/l*(l-self.l0)
+            out[1,ev[1]] -= 2*self.k*dy/l*(l-self.l0)
+            out[2,ev[0]] += 2*self.k*dz/l*(l-self.l0)
+            out[2,ev[1]] -= 2*self.k*dz/l*(l-self.l0)
+
+        }
+        return out
+
+    }
+
+}
+fn _cvert(ev, faces, ef) {
+  var cv = []
+  for (i in 0..1) for (v in faces.rowindices(ef[i])) if (!ev.ismember(v)) cv.append(v)
+  return cv
+}
+fn fludization(m){
+
+    var vert = m.vertexmatrix()
+    var edges = m.connectivitymatrix(0,1)
+    var faces = m.connectivitymatrix(0,2)
+    var edgetoface = m.connectivitymatrix(2,1)
+    var verttoedge = m.connectivitymatrix(1,0)
+    var ne = edges.dimensions()[1]
+    var iedge = Int(floor(random()*ne))
+    var ev=edges.rowindices(iedge) // vertices for this edge
+    if (verttoedge.rowindices(ev[0]).count()<4 ||
+        verttoedge.rowindices(ev[1]).count()<4) return // skip if connectivity deficient
+
+    var ef=edgetoface.rowindices(iedge) // faces attached to this edge
+    if (ef.count()!=2) return  // Only edges that are connected to two triangles
+
+    var cv=_cvert(ev, faces, ef)
+
+    edges.setrowindices(iedge, cv)
+    faces.setrowindices(ef[0], [ev[0], cv[0], cv[1]])
+    faces.setrowindices(ef[1], [ev[1], cv[0], cv[1]])
+    m.resetconnectivity()
+}
+
+// first make a nice spherical dropplet
+var impl = ImplicitMeshBuilder(fn (x, y ,z) x^2 + y^2 + z^2 -1)
+var mesh = impl.build(stepsize = 0.1)
+// Show(plotmesh(mesh))
+// now make all the lines springs
+
+mesh.addgrade(1)
+
+var problem = OptimizationProblem(mesh)
+var elastic = elasticFunctional(1,0.1)
+problem.addenergy(elastic)
+problem.addconstraint(VolumeEnclosed())
+problem.addenergy(Area(),prefactor=0.1)
+
+var opt = ShapeOptimizer(problem,mesh)
+
+var lineToVert = mesh.connectivitymatrix(0,1)
+var faceToLine = mesh.connectivitymatrix(1,2)
+
+for (var i in 1...10){
+    opt.relax(100)
+    Show(plotmesh(mesh))
+
+    // do a fludization step
+    for (var j in 1...100) fludization(mesh)
+}
+
